@@ -164,7 +164,7 @@
         data.lastOnline = true;
 
         const uptimeMs = now - data.firstOnline;
-        data.uptimeMinutes = Math.floor(uptimeMs / 60000);
+        data.uptimeMinutes = Math.floor(uptimeMs / 10000);
 
         data.pingHistory.push({ time: timeLabel, ping: result.ping });
         if (data.pingHistory.length > 20) data.pingHistory.shift();
