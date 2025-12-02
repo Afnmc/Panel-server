@@ -197,7 +197,7 @@
       for (const server of servers) {
         await updateServer(server);
       }
-      setTimeout(monitorLoop, 60000);
+      setTimeout(monitorLoop, 10000);
     }
 
     monitorLoop();
