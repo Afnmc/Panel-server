@@ -167,7 +167,7 @@
         data.uptimeMinutes = Math.floor(uptimeMs / 10000);
 
         data.pingHistory.push({ time: timeLabel, ping: result.ping });
-        if (data.pingHistory.length > 20) data.pingHistory.shift();
+        if (data.pingHistory.length > 10) data.pingHistory.shift();
 
         statusEl.textContent = "🟢 Online";
         statusEl.className = "status-online";
