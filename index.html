@@ -3,204 +3,215 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>🎮 Minecraft Server Monitor</title>
+  <title>Minecraft + Node Status</title>
 
-  <!-- Chart.js stable CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #1e1e2e;
+      background: #0f0f1b;
       color: #e0e0ff;
-      margin: 0;
       padding: 20px;
-    }
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
+      margin: 0;
     }
     h1 {
       text-align: center;
-      color: #64b5f6;
+      color: #4fc3f7;
+      margin-bottom: 10px;
     }
-    .server {
-      background: #2d2d44;
-      border-radius: 10px;
-      padding: 16px;
+    .refresh-info {
+      text-align: center;
+      color: #aaa;
       margin-bottom: 20px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      font-size: 0.95em;
     }
-    .info {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-      gap: 10px;
+    .server-card {
+      background: #1a1a2e;
+      border-left: 4px solid #4fc3f7;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+      margin-bottom: 20px;
     }
-    .metric {
-      font-size: 16px;
+    .server-name {
+      font-size: 1.25em;
+      color: #bb86fc;
+      font-weight: bold;
+      margin-bottom: 10px;
     }
-    .label { color: #a0a0c0; }
-    .value { color: white; font-weight: bold; }
-    .status-online { color: #66bb6a; }
-    .status-offline { color: #ef5350; }
-    canvas {
-      height: 160px;
-      margin-top: 10px;
+    .row { margin: 6px 0; display: flex; }
+    .label { width: 140px; color: #80deea; font-weight: bold; }
+    .value { flex: 1; }
+    .node-on { color: #69f0ae; font-weight: bold; }
+    .node-off { color: #ff5252; font-weight: bold; }
+    .mc-online { color: #69f0ae; }
+    .mc-offline { color: #ff5252; }
+    .chart-container {
+      background: #161625;
+      padding: 12px;
+      border-radius: 8px;
+      height: 180px;
     }
   </style>
 </head>
+
 <body>
-  <div class="container">
-    <h1>🎮 Minecraft Server Monitor</h1>
-    <div id="servers"></div>
-  </div>
 
-  <script>
+<h1>🌐 Minecraft Server & Node Status</h1>
+<div class="refresh-info">
+  Auto-refresh setiap 10 detik | Update ke-<strong id="counter">0</strong>
+</div>
 
-    const servers = [
-      { id: 1, name: "Server 1", ip: "nl-1.nura.host:19132" },
-      { id: 2, name: "Server 2", ip: "mc.mineplex.com" },
-      { id: 3, name: "Server 3", ip: "your-server-3.com" },
-      { id: 4, name: "Server 4", ip: "your-server-4.com" },
-      { id: 5, name: "Server 5", ip: "your-server-5.com" }
-    ];
+<div id="servers"></div>
 
-    const serverData = {};
+<div class="chart-container">
+  <canvas id="pingChart"></canvas>
+</div>
 
-    servers.forEach(server => {
-      serverData[server.id] = {
-        pingHistory: [],
-        uptimeMinutes: 0,
-        firstOnline: null,
-        lastOnline: false,
-        playerCount: 0,
-        isOnline: false,
-        chart: null
+<script>
+
+  const serverList = [
+    { name: "Server 1", mcHost: "nl-1.nura.host", mcPort: 19132, nodeHost: "nl-1.nura.host", enabled: true },
+    { name: "Server 2", mcHost: "-", mcPort: "-", nodeHost: "-", enabled: false },
+    { name: "Server 3", mcHost: "-", mcPort: "-", nodeHost: "-", enabled: false },
+    { name: "Server 4", mcHost: "-", mcPort: "-", nodeHost: "-", enabled: false },
+    { name: "Server 5", mcHost: "-", mcPort: "-", nodeHost: "-", enabled: false }
+  ];
+
+  let refreshCount = 0;
+  const history = [[], [], [], [], []];
+  const maxHistory = 40;
+
+  async function getMCStatus(host, port) {
+    if (host === "-" || port === "-") return { mcOnline: false };
+
+    try {
+      const res = await fetch(`https://api.mcstatus.io/v2/status/bedrock/${host}:${port}`);
+      const json = await res.json();
+
+      if (!json || json.error) return { mcOnline: false };
+
+      return {
+        mcOnline: json.online,
+        ping: json.ms ?? null,
+        players: json.players?.online ?? 0
       };
+    } 
+    catch (e) {
+      return { mcOnline: false };
+    }
+  }
 
-      const el = document.createElement('div');
-      el.className = 'server';
-      el.id = `server-${server.id}`;
-      el.innerHTML = `
-        <h3>${server.name} <span id="status-${server.id}" class="status-offline">🔴 Offline</span></h3>
-        <div class="info">
-          <div class="metric"><span class="label">Ping:</span> <span id="ping-${server.id}" class="value">— ms</span></div>
-          <div class="metric"><span class="label">Players:</span> <span id="player-${server.id}" class="value">—</span></div>
-          <div class="metric"><span class="label">Uptime:</span> <span id="uptime-${server.id}" class="value">0m</span></div>
-          <div class="metric"><span class="label">IP:</span> <span class="value">${server.ip}</span></div>
-        </div>
-        <canvas id="chart-${server.id}"></canvas>
-      `;
-      document.getElementById('servers').appendChild(el);
-
-      const ctx = document.getElementById(`chart-${server.id}`).getContext('2d');
-      serverData[server.id].chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: [],
-          datasets: [{
-            label: 'Latency (ms)',
-            data: [],
-            borderColor: '#81C784',
-            backgroundColor: 'rgba(129, 199, 132, 0.1)',
-            tension: 0.3,
-            fill: true
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: {
-            y: { beginAtZero: true },
-            x: {}
-          }
-        }
-      });
-    });
-
-    async function fetchMinecraftStatus(ip) {
-      const start = Date.now();
-      try {
-        const res = await fetch(`https://api.mcsrvstat.us/3/${ip}`);
-        const ping = Date.now() - start;
-
-        if (!res.ok) return null;
-
-        const data = await res.json();
-
-        // FIX: Avoid crash when debug undefined
-        if (data.debug && data.debug.cached) {
-          return null;
+  async function updateServerData() {
+    return await Promise.all(
+      serverList.map(async (srv) => {
+        if (!srv.enabled) {
+          return {
+            ...srv,
+            nodeOn: false,
+            mcOnline: false,
+            ping: null,
+            players: 0
+          };
         }
 
+        const mc = await getMCStatus(srv.mcHost, srv.mcPort);
         return {
-          ping,
-          online: data.online,
-          players: data.players ? data.players.online : 0
+          ...srv,
+          nodeOn: mc.mcOnline,
+          mcOnline: mc.mcOnline,
+          ping: mc.ping,
+          players: mc.players
         };
-      } catch {
-        return null;
+      })
+    );
+  }
+
+  function renderServers(data) {
+    const container = document.getElementById("servers");
+    container.innerHTML = "";
+
+    data.forEach((srv, i) => {
+      const card = document.createElement("div");
+      card.className = "server-card";
+
+      const nodeStatus = srv.enabled
+        ? srv.nodeOn ? `<span class="node-on">ON</span>` : `<span class="node-off">OFF</span>`
+        : "-";
+
+      const mcStatus = srv.enabled
+        ? srv.mcOnline
+          ? `<span class="mc-online">✅ Online • ${srv.players} pemain • ${srv.ping} ms</span>`
+          : `<span class="mc-offline">❌ Offline</span>`
+        : "-";
+
+      card.innerHTML = `
+        <div class="server-name">${srv.name}</div>
+
+        <div class="row"><div class="label">IP Minecraft:</div>
+          <div class="value">${srv.enabled ? `${srv.mcHost}:${srv.mcPort}` : "-"}</div></div>
+
+        <div class="row"><div class="label">Node:</div>
+          <div class="value">${srv.enabled ? `${srv.nodeHost} • Status: ${nodeStatus}` : "-"}</div></div>
+
+        <div class="row"><div class="label">Minecraft:</div>
+          <div class="value">${mcStatus}</div></div>
+      `;
+
+      container.appendChild(card);
+
+      if (srv.mcOnline && srv.ping !== null) {
+        history[i].push({ x: new Date(), y: srv.ping });
+        if (history[i].length > maxHistory) history[i].shift();
       }
+    });
+  }
+
+  // Chart setup
+  const ctx = document.getElementById("pingChart").getContext("2d");
+  const chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      datasets: serverList.map((srv, i) => ({
+        label: srv.name,
+        data: history[i],
+        borderWidth: 2,
+        tension: 0.3,
+        pointRadius: 2,
+      }))
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { type: "time", time: { unit: "second" } },
+        y: { beginAtZero: true, title: { text: "Ping (ms)", display: true } }
+      },
+      animation: { duration: 0 }
     }
+  });
 
-    async function updateServer(server) {
-      const data = serverData[server.id];
-      const result = await fetchMinecraftStatus(server.ip);
+  function updateChart() {
+    chart.data.datasets.forEach((ds, i) => {
+      ds.data = history[i];
+    });
+    chart.update("none");
+  }
 
-      const now = new Date();
-      const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  async function updateAll() {
+    refreshCount++;
+    document.getElementById("counter").textContent = refreshCount;
 
-      const statusEl = document.getElementById(`status-${server.id}`);
-      const pingEl = document.getElementById(`ping-${server.id}`);
-      const playerEl = document.getElementById(`player-${server.id}`);
-      const uptimeEl = document.getElementById(`uptime-${server.id}`);
+    const data = await updateServerData();
+    renderServers(data);
+    updateChart();
+  }
 
-      if (result && result.online) {
-        data.isOnline = true;
-        if (!data.firstOnline || !data.lastOnline) {
-          data.firstOnline = now;
-        }
-        data.lastOnline = true;
+  updateAll();
+  setInterval(updateAll, 10000);
 
-        const uptimeMs = now - data.firstOnline;
-        data.uptimeMinutes = Math.floor(uptimeMs / 10000);
+</script>
 
-        data.pingHistory.push({ time: timeLabel, ping: result.ping });
-        if (data.pingHistory.length > 10) data.pingHistory.shift();
-
-        statusEl.textContent = "🟢 Online";
-        statusEl.className = "status-online";
-        pingEl.textContent = `${result.ping} ms`;
-        playerEl.textContent = result.players;
-        uptimeEl.textContent = `${data.uptimeMinutes}m`;
-
-        const chart = data.chart;
-        chart.data.labels = data.pingHistory.map(p => p.time);
-        chart.data.datasets[0].data = data.pingHistory.map(p => p.ping);
-        chart.update();
-      } else {
-        data.isOnline = false;
-        data.lastOnline = false;
-        data.firstOnline = null;
-        data.uptimeMinutes = 0;
-
-        statusEl.textContent = "🔴 Offline";
-        statusEl.className = "status-offline";
-        pingEl.textContent = "— ms";
-        playerEl.textContent = "—";
-        uptimeEl.textContent = "0m";
-      }
-    }
-
-    async function monitorLoop() {
-      for (const server of servers) {
-        await updateServer(server);
-      }
-      setTimeout(monitorLoop, 10000);
-    }
-
-    monitorLoop();
-  </script>
 </body>
 </html>
