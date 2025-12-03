@@ -1,0 +1,30 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #1b1b1b;
+    color: white;
+    text-align: center;
+    padding: 20px;
+}
+
+.container {
+    max-width: 700px;
+    margin: auto;
+}
+
+.card {
+    background: #222;
+    padding: 20px;
+    border-radius: 10px;
+    margin-top: 10px;
+    text-align: left;
+}
+
+.status-up {
+    color: #4caf50;
+    font-weight: bold;
+}
+
+.status-down {
+    color: #ff5252;
+    font-weight: bold;
+}
