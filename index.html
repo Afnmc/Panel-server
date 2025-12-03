@@ -1,227 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Minecraft + Node Status</title>
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-
-  <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #0f0f1b;
-      color: #e0e0ff;
-      padding: 20px;
-      margin: 0;
-    }
-    h1 {
-      text-align: center;
-      color: #4fc3f7;
-      margin-bottom: 10px;
-    }
-    .refresh-info {
-      text-align: center;
-      color: #aaa;
-      margin-bottom: 20px;
-      font-size: 0.95em;
-    }
-    .server-card {
-      background: #1a1a2e;
-      border-left: 4px solid #4fc3f7;
-      padding: 16px;
-      border-radius: 8px;
-      box-shadow: 0 3px 10px rgba(0,0,0,0.3);
-      margin-bottom: 20px;
-    }
-    .server-name {
-      font-size: 1.25em;
-      color: #bb86fc;
-      font-weight: bold;
-      margin-bottom: 10px;
-    }
-    .row { margin: 6px 0; display: flex; }
-    .label { width: 140px; color: #80deea; font-weight: bold; }
-    .value { flex: 1; }
-    .node-on { color: #69f0ae; font-weight: bold; }
-    .node-off { color: #ff5252; font-weight: bold; }
-    .mc-online { color: #69f0ae; }
-    .mc-offline { color: #ff5252; }
-    .chart-container {
-      background: #161625;
-      padding: 12px;
-      border-radius: 8px;
-      height: 180px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server & Node Status</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
+    <h1>AfnMC Status</h1>
 
-<h1>🌐 Minecraft Server & Node Status</h1>
-<div class="refresh-info">
-  Auto-refresh setiap 10 detik | Update ke-<strong id="counter">0</strong>
-</div>
+    <div class="container">
 
-<div id="servers"></div>
+        <h2>Server Status</h2>
+        <div id="serverStatus" class="card"></div>
 
-<div class="chart-container">
-  <canvas id="pingChart"></canvas>
-</div>
+        <h2>Node Status (GitHub ICMP)</h2>
+        <div id="nodeStatus" class="card"></div>
 
-<script>
+    </div>
 
-  const serverList = [
-    { name: "Server 1", mcHost: "nl-1.nura.host", mcPort: 19132, nodeHost: "nl-1.nura.host", enabled: true },
-    { name: "Server 2", mcHost: "-", mcPort: "-", nodeHost: "nl-3.nura.host", enabled: true },
-    { name: "Server 3", mcHost: "-", mcPort: "-", nodeHost: "-", enabled: false },
-    { name: "Server 4", mcHost: "-", mcPort: "-", nodeHost: "-", enabled: false },
-    { name: "Server 5", mcHost: "-", mcPort: "-", nodeHost: "-", enabled: false }
-  ];
-
-  let refreshCount = 0;
-  const history = [[], [], [], [], []];
-  const maxHistory = 40;
-
-  // Cek status Minecraft (host+port)
-  async function getMCStatus(host, port) {
-    if (host === "-" || port === "-") return { mcOnline: false };
-
-    try {
-      const res = await fetch(`https://api.mcstatus.io/v2/status/bedrock/${host}:${port}`);
-      const json = await res.json();
-
-      if (!json || json.error) return { mcOnline: false };
-
-      return {
-        mcOnline: json.online,
-        ping: json.ms ?? null,
-        players: json.players?.online ?? 0
-      };
-    } 
-    catch (e) {
-      return { mcOnline: false };
-    }
-  }
-
-  // Cek node (host saja)
-  async function checkNode(host) {
-    if (host === "-") return false;
-
-    try {
-      const res = await fetch("https://api.mcsrvstat.us/simple/" + host, { method: "GET" });
-      return res.status === 200;
-    } 
-    catch {
-      return false;
-    }
-  }
-
-  async function updateServerData() {
-    return await Promise.all(
-      serverList.map(async (srv) => {
-        if (!srv.enabled) {
-          return { ...srv, nodeOn: false, mcOnline: false, ping: null, players: 0 };
-        }
-
-        const node = await checkNode(srv.nodeHost);
-        const mc = await getMCStatus(srv.mcHost, srv.mcPort);
-
-        return {
-          ...srv,
-          nodeOn: node,
-          mcOnline: mc.mcOnline,
-          ping: mc.ping,
-          players: mc.players
-        };
-      })
-    );
-  }
-
-  function renderServers(data) {
-    const container = document.getElementById("servers");
-    container.innerHTML = "";
-
-    data.forEach((srv, i) => {
-      const card = document.createElement("div");
-      card.className = "server-card";
-
-      const nodeStatus = srv.enabled
-        ? srv.nodeOn ? `<span class="node-on">ON</span>` : `<span class="node-off">OFF</span>`
-        : "-";
-
-      const mcStatus = srv.enabled
-        ? srv.mcOnline
-          ? `<span class="mc-online">✅ Online • ${srv.players} pemain • ${srv.ping} ms</span>`
-          : `<span class="mc-offline">❌ Offline</span>`
-        : "-";
-
-      card.innerHTML = `
-        <div class="server-name">${srv.name}</div>
-
-        <div class="row"><div class="label">IP Minecraft:</div>
-          <div class="value">${srv.enabled ? `${srv.mcHost}:${srv.mcPort}` : "-"}</div></div>
-
-        <div class="row"><div class="label">Node:</div>
-          <div class="value">${srv.enabled ? `${srv.nodeHost} • Status: ${nodeStatus}` : "-"}</div></div>
-
-        <div class="row"><div class="label">Minecraft:</div>
-          <div class="value">${mcStatus}</div></div>
-      `;
-
-      container.appendChild(card);
-
-      if (srv.mcOnline && srv.ping !== null) {
-        history[i].push({ x: new Date(), y: srv.ping });
-        if (history[i].length > maxHistory) history[i].shift();
-      }
-    });
-  }
-
-  // Chart setup
-  const ctx = document.getElementById("pingChart").getContext("2d");
-  const chart = new Chart(ctx, {
-    type: "line",
-    data: {
-      datasets: serverList.map((srv, i) => ({
-        label: srv.name,
-        data: history[i],
-        borderWidth: 2,
-        tension: 0.3,
-        pointRadius: 2,
-      }))
-    },
-    options: {
-      responsive: true,
-      scales: {
-        x: { type: "time", time: { unit: "second" } },
-        y: { beginAtZero: true, title: { text: "Ping (ms)", display: true } }
-      },
-      animation: { duration: 0 }
-    }
-  });
-
-  function updateChart() {
-    chart.data.datasets.forEach((ds, i) => {
-      ds.data = history[i];
-    });
-    chart.update("none");
-  }
-
-  async function updateAll() {
-    refreshCount++;
-    document.getElementById("counter").textContent = refreshCount;
-
-    const data = await updateServerData();
-    renderServers(data);
-    updateChart();
-  }
-
-  updateAll();
-  setInterval(updateAll, 10000);
-
-</script>
-
+    <script src="script.js"></script>
 </body>
 </html>
