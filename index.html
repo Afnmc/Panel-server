@@ -59,7 +59,7 @@
 
 <body>
 
-<h1>Panel Azthera SMP ☄︎</h1>
+<h1>🌐 Minecraft Server & Node Status</h1>
 <div class="refresh-info">
   Auto-refresh setiap 10 detik | Update ke-<strong id="counter">0</strong>
 </div>
@@ -84,6 +84,7 @@
   const history = [[], [], [], [], []];
   const maxHistory = 40;
 
+  // Cek status Minecraft (host+port)
   async function getMCStatus(host, port) {
     if (host === "-" || port === "-") return { mcOnline: false };
 
@@ -104,23 +105,32 @@
     }
   }
 
+  // Cek node (host saja)
+  async function checkNode(host) {
+    if (host === "-") return false;
+
+    try {
+      const res = await fetch("https://api.mcsrvstat.us/simple/" + host, { method: "GET" });
+      return res.status === 200;
+    } 
+    catch {
+      return false;
+    }
+  }
+
   async function updateServerData() {
     return await Promise.all(
       serverList.map(async (srv) => {
         if (!srv.enabled) {
-          return {
-            ...srv,
-            nodeOn: false,
-            mcOnline: false,
-            ping: null,
-            players: 0
-          };
+          return { ...srv, nodeOn: false, mcOnline: false, ping: null, players: 0 };
         }
 
+        const node = await checkNode(srv.nodeHost);
         const mc = await getMCStatus(srv.mcHost, srv.mcPort);
+
         return {
           ...srv,
-          nodeOn: mc.mcOnline,
+          nodeOn: node,
           mcOnline: mc.mcOnline,
           ping: mc.ping,
           players: mc.players
