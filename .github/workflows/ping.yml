@@ -1,1 +1,49 @@
+name: Auto Ping
 
+on:
+  schedule:
+    - cron: "*/1 * * * *"   # setiap 1 menit
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install ping
+        run: sudo apt-get install iputils-ping -y
+
+      - name: Run ping
+        id: pingstep
+        run: |
+          TARGET_IP="nl-1.nura.host"
+
+          PING_RESULT=$(ping -c 1 -W 1 $TARGET_IP | grep 'time=' | awk -F 'time=' '{print $2}' | awk '{print $1}')
+
+          if [ -z "$PING_RESULT" ]; then
+            PING_RESULT=0
+          fi
+
+          NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          echo "::set-output name=ping::$PING_RESULT"
+          echo "::set-output name=time::$NOW"
+
+      - name: Update ping.json
+        run: |
+          PING=${{ steps.pingstep.outputs.ping }}
+          TIME=${{ steps.pingstep.outputs.time }}
+
+          jq --arg t "$TIME" --arg p "$PING" \
+          '.updated = $t | .history += [{x: $t, y: ($p|tonumber)}] | .history |= (.[-100:] // .)' \
+          ping.json > tmp.json
+
+          mv tmp.json ping.json
+
+      - name: Commit & Push
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto update ping"
